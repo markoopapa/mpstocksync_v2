@@ -505,116 +505,132 @@ class MpStockSync extends Module
     }
     
     private function syncToEmag($id_product, $id_product_attribute, $quantity)
-    {
-        try {
-            // Get mapping
-            $mapping = $this->getProductMapping($id_product, $id_product_attribute, 'emag');
-            
-            if (!$mapping || !$mapping['active']) {
-                return false;
-            }
-            
-            // Initialize service
-            if ($this->emagService === null) {
-                $this->emagService = new EmagService(
-                    Configuration::get('MP_EMAG_API_URL'),
-                    Configuration::get('MP_EMAG_CLIENT_ID'),
-                    Configuration::get('MP_EMAG_CLIENT_SECRET'),
-                    Configuration::get('MP_EMAG_USERNAME'),
-                    Configuration::get('MP_EMAG_PASSWORD')
-                );
-            }
-            
-            // Update stock
-            $result = $this->emagService->updateStock($mapping['external_id'], $quantity);
-            
-            // Log result
-            Db::getInstance()->insert('mpstocksync_log', [
-                'api_name' => 'emag',
-                'id_product' => $id_product,
-                'id_product_attribute' => $id_product_attribute,
-                'action' => 'stock_update',
-                'status' => $result['success'] ? 1 : 0,
-                'error_message' => $result['success'] ? null : json_encode($result),
-                'response_data' => pSQL(json_encode($result)),
-                'date_add' => date('Y-m-d H:i:s')
-            ]);
-            
-            return $result['success'];
-            
-        } catch (Exception $e) {
-            Db::getInstance()->insert('mpstocksync_log', [
-                'api_name' => 'emag',
-                'id_product' => $id_product,
-                'id_product_attribute' => $id_product_attribute,
-                'action' => 'error',
-                'status' => 0,
-                'error_message' => pSQL($e->getMessage()),
-                'date_add' => date('Y-m-d H:i:s')
-            ]);
-            
+{
+    try {
+        // Get mapping
+        $mapping = $this->getProductMapping($id_product, $id_product_attribute, 'emag');
+        
+        if (!$mapping || !$mapping['active']) {
             return false;
         }
+        
+        // Initialize service
+        if ($this->emagService === null) {
+            $this->emagService = new EmagService(
+                Configuration::get('MP_EMAG_API_URL'),
+                Configuration::get('MP_EMAG_CLIENT_ID'),
+                Configuration::get('MP_EMAG_CLIENT_SECRET'),
+                Configuration::get('MP_EMAG_USERNAME'),
+                Configuration::get('MP_EMAG_PASSWORD')
+            );
+        }
+        
+        // Update stock
+        $result = $this->emagService->updateStock($mapping['external_id'], $quantity);
+        
+        // ELLENŐRZÉS: Ha $result nem tömb, alakítsuk át
+        if (!is_array($result)) {
+            $result = ['success' => (bool)$result];
+        }
+        
+        // JAVÍTVA: Ellenőrizzük, hogy van-e 'success' kulcs
+        $success = isset($result['success']) ? (bool)$result['success'] : false;
+        
+        // Log result
+        Db::getInstance()->insert('mpstocksync_log', [
+            'api_name' => 'emag',
+            'id_product' => $id_product,
+            'id_product_attribute' => $id_product_attribute,
+            'action' => 'stock_update',
+            'status' => $success ? 1 : 0,
+            'error_message' => $success ? null : json_encode($result),
+            'response_data' => pSQL(json_encode($result)),
+            'date_add' => date('Y-m-d H:i:s')
+        ]);
+        
+        return $success;
+        
+    } catch (Exception $e) {
+        Db::getInstance()->insert('mpstocksync_log', [
+            'api_name' => 'emag',
+            'id_product' => $id_product,
+            'id_product_attribute' => $id_product_attribute,
+            'action' => 'error',
+            'status' => 0,
+            'error_message' => pSQL($e->getMessage()),
+            'date_add' => date('Y-m-d H:i:s')
+        ]);
+        
+        return false;
     }
+}
     
     private function syncToTrendyol($id_product, $id_product_attribute, $quantity)
-    {
-        try {
-            // Get mapping
-            $mapping = $this->getProductMapping($id_product, $id_product_attribute, 'trendyol');
-            
-            if (!$mapping || !$mapping['active']) {
-                return false;
-            }
-            
-            // Get product price
-            $price = Product::getPriceStatic($id_product, true, $id_product_attribute);
-            
-            // Initialize service
-            if ($this->trendyolService === null) {
-                $this->trendyolService = new TrendyolService(
-                    Configuration::get('MP_TRENDYOL_API_URL'),
-                    Configuration::get('MP_TRENDYOL_API_KEY'),
-                    Configuration::get('MP_TRENDYOL_API_SECRET'),
-                    Configuration::get('MP_TRENDYOL_SUPPLIER_ID')
-                );
-            }
-            
-            // Update stock and price
-            $result = $this->trendyolService->updateStockAndPrice(
-                $mapping['external_id'],
-                $quantity,
-                $price
-            );
-            
-            // Log result
-            Db::getInstance()->insert('mpstocksync_log', [
-                'api_name' => 'trendyol',
-                'id_product' => $id_product,
-                'id_product_attribute' => $id_product_attribute,
-                'action' => 'stock_price_update',
-                'status' => $result['success'] ? 1 : 0,
-                'error_message' => $result['success'] ? null : json_encode($result),
-                'response_data' => pSQL(json_encode($result)),
-                'date_add' => date('Y-m-d H:i:s')
-            ]);
-            
-            return $result['success'];
-            
-        } catch (Exception $e) {
-            Db::getInstance()->insert('mpstocksync_log', [
-                'api_name' => 'trendyol',
-                'id_product' => $id_product,
-                'id_product_attribute' => $id_product_attribute,
-                'action' => 'error',
-                'status' => 0,
-                'error_message' => pSQL($e->getMessage()),
-                'date_add' => date('Y-m-d H:i:s')
-            ]);
-            
+{
+    try {
+        // Get mapping
+        $mapping = $this->getProductMapping($id_product, $id_product_attribute, 'trendyol');
+        
+        if (!$mapping || !$mapping['active']) {
             return false;
         }
+        
+        // Get product price
+        $price = Product::getPriceStatic($id_product, true, $id_product_attribute);
+        
+        // Initialize service
+        if ($this->trendyolService === null) {
+            $this->trendyolService = new TrendyolService(
+                Configuration::get('MP_TRENDYOL_API_URL'),
+                Configuration::get('MP_TRENDYOL_API_KEY'),
+                Configuration::get('MP_TRENDYOL_API_SECRET'),
+                Configuration::get('MP_TRENDYOL_SUPPLIER_ID')
+            );
+        }
+        
+        // Update stock and price
+        $result = $this->trendyolService->updateStockAndPrice(
+            $mapping['external_id'],
+            $quantity,
+            $price
+        );
+        
+        // ELLENŐRZÉS: Ha $result nem tömb, alakítsuk át
+        if (!is_array($result)) {
+            $result = ['success' => (bool)$result];
+        }
+        
+        // JAVÍTVA: Ellenőrizzük, hogy van-e 'success' kulcs
+        $success = isset($result['success']) ? (bool)$result['success'] : false;
+        
+        // Log result
+        Db::getInstance()->insert('mpstocksync_log', [
+            'api_name' => 'trendyol',
+            'id_product' => $id_product,
+            'id_product_attribute' => $id_product_attribute,
+            'action' => 'stock_price_update',
+            'status' => $success ? 1 : 0,
+            'error_message' => $success ? null : json_encode($result),
+            'response_data' => pSQL(json_encode($result)),
+            'date_add' => date('Y-m-d H:i:s')
+        ]);
+        
+        return $success;
+        
+    } catch (Exception $e) {
+        Db::getInstance()->insert('mpstocksync_log', [
+            'api_name' => 'trendyol',
+            'id_product' => $id_product,
+            'id_product_attribute' => $id_product_attribute,
+            'action' => 'error',
+            'status' => 0,
+            'error_message' => pSQL($e->getMessage()),
+            'date_add' => date('Y-m-d H:i:s')
+        ]);
+        
+        return false;
     }
+}
     
     private function getProductMapping($id_product, $id_product_attribute, $api_name)
     {

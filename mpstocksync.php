@@ -40,6 +40,24 @@ class MpStockSync extends Module
         }
         
         // Adatbázis táblák létrehozása
+        if (!$this->createTables()) {
+            return false;
+        }
+        
+        // Tab-ok létrehozása
+        if (!$this->createTabs()) {
+            return false;
+        }
+        
+        // Alap konfiguráció
+        Configuration::updateValue('MP_STOCK_API_KEY', '');
+        Configuration::updateValue('MP_STOCK_API_SECRET', '');
+        
+        return true;
+    }
+    
+    private function createTables()
+    {
         $sql = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'mp_stock_product_mapping` (
             `id_mapping` int(11) UNSIGNED NOT NULL AUTO_INCREMENT,
             `id_product` int(11) UNSIGNED NOT NULL,
@@ -51,27 +69,83 @@ class MpStockSync extends Module
             PRIMARY KEY (`id_mapping`)
         ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8;';
         
-        if (!Db::getInstance()->execute($sql)) {
+        return Db::getInstance()->execute($sql);
+    }
+    
+    private function createTabs()
+    {
+        // Fő admin tab (Stock Sync)
+        $parentTab = new Tab();
+        $parentTab->class_name = 'AdminMpStockSync';
+        $parentTab->module = $this->name;
+        $parentTab->id_parent = (int)Tab::getIdFromClassName('AdminParentPreferences'); // Beállítások menü alá
+        
+        $languages = Language::getLanguages();
+        foreach ($languages as $lang) {
+            $parentTab->name[$lang['id_lang']] = $this->l('Stock Sync');
+        }
+        
+        if (!$parentTab->add()) {
             return false;
         }
         
-        // Alap konfiguráció
-        Configuration::updateValue('MP_STOCK_API_KEY', '');
-        Configuration::updateValue('MP_STOCK_API_SECRET', '');
+        // Almenü tab-ok
+        $subTabs = [
+            ['AdminMpStockSyncApi', 'API Settings'],
+            ['AdminMpStockSyncProductMapping', 'Product Mapping'],
+            ['AdminMpStockSyncManualSync', 'Manual Sync'],
+            ['AdminMpStockSyncLogs', 'Logs']
+        ];
+        
+        foreach ($subTabs as $tab) {
+            $newTab = new Tab();
+            $newTab->class_name = $tab[0];
+            $newTab->module = $this->name;
+            $newTab->id_parent = $parentTab->id;
+            
+            foreach ($languages as $lang) {
+                $newTab->name[$lang['id_lang']] = $this->l($tab[1]);
+            }
+            
+            if (!$newTab->add()) {
+                // Ha nem sikerül, töröljük az eddigieket
+                $this->deleteTabs();
+                return false;
+            }
+        }
         
         return true;
     }
     
+    private function deleteTabs()
+    {
+        $tabs = [
+            'AdminMpStockSync',
+            'AdminMpStockSyncApi',
+            'AdminMpStockSyncProductMapping',
+            'AdminMpStockSyncManualSync',
+            'AdminMpStockSyncLogs'
+        ];
+        
+        foreach ($tabs as $className) {
+            $id_tab = Tab::getIdFromClassName($className);
+            if ($id_tab) {
+                $tab = new Tab($id_tab);
+                $tab->delete();
+            }
+        }
+    }
+    
     public function uninstall()
     {
-        if (!parent::uninstall()) {
-            return false;
-        }
+        // Tab-ok törlése
+        $this->deleteTabs();
         
+        // Konfigurációk törlése
         Configuration::deleteByName('MP_STOCK_API_KEY');
         Configuration::deleteByName('MP_STOCK_API_SECRET');
         
-        return true;
+        return parent::uninstall();
     }
     
     public function getContent()

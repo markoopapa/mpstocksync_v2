@@ -1,4 +1,5 @@
 <?php
+// NINCS namespace! Sima class, mert manuálisan töltjük be
 class EmagService
 {
     private $apiUrl;
@@ -19,22 +20,33 @@ class EmagService
     
     public function updateStock($sku, $quantity)
     {
-        // Mock implementation - cseréld ki valós API hívással
-        return [
-            'success' => true,
-            'message' => 'Stock updated successfully (MOCK)',
-            'data' => [
-                'sku' => $sku,
-                'quantity' => $quantity
-            ]
-        ];
+        try {
+            // TODO: Implement real eMAG API call
+            // For now, return mock response
+            
+            return [
+                'success' => true,
+                'http_code' => 200,
+                'message' => 'Stock updated successfully (MOCK)',
+                'data' => [
+                    'sku' => $sku,
+                    'quantity' => $quantity
+                ]
+            ];
+            
+        } catch (Exception $e) {
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
+        }
     }
     
     public function testConnection()
     {
         return [
             'success' => true,
-            'message' => 'Connection test successful (MOCK)'
+            'message' => 'eMAG connection test successful (MOCK)'
         ];
     }
 }

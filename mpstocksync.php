@@ -3,7 +3,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-// Manuális class betöltés, mert a composer még nincs
+// Manually load required classes (composer autoload not available yet)
 require_once __DIR__ . '/src/Services/EmagService.php';
 require_once __DIR__ . '/src/Services/TrendyolService.php';
 require_once __DIR__ . '/src/Services/SupplierSyncService.php';

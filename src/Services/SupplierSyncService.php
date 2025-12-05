@@ -1,4 +1,6 @@
 <?php
+namespace MpStockSync\Services;  // ← UGYANAZ A NAMESPACE!
+
 class SupplierSyncService
 {
     private $supplierConfig;
@@ -9,22 +11,20 @@ class SupplierSyncService
     }
     
     private function loadSupplierConfig($supplierId)
-{
-    $sql = 'SELECT * FROM `'._DB_PREFIX_.'mpstocksync_suppliers`
-            WHERE id_supplier = '.(int)$supplierId;
-    
-    $this->supplierConfig = Db::getInstance()->getRow($sql);
-    
-    if (!$this->supplierConfig) {
-        throw new Exception('Supplier configuration not found for ID: ' . $supplierId);
+    {
+        $sql = 'SELECT * FROM `'._DB_PREFIX_.'mpstocksync_suppliers`
+                WHERE id_supplier = '.(int)$supplierId;
+        
+        $this->supplierConfig = Db::getInstance()->getRow($sql);
+        
+        if (!$this->supplierConfig) {
+            throw new \Exception('Supplier configuration not found');
+        }
     }
-}
     
     public function syncSupplierToShops($supplierId)
     {
         // Mock implementation
-        // TODO: Implement real supplier sync
-        
         return [
             'success' => true,
             'total' => 15,
@@ -45,7 +45,6 @@ class SupplierSyncService
     
     private function testDatabaseConnection()
     {
-        // Mock database test
         return [
             'success' => true,
             'message' => 'Database connection successful (MOCK)'
@@ -54,7 +53,6 @@ class SupplierSyncService
     
     private function testApiConnection()
     {
-        // Mock API test
         return [
             'success' => true,
             'message' => 'API connection successful (MOCK)'

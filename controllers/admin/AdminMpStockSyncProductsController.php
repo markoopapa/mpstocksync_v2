@@ -3,199 +3,262 @@ class AdminMpStockSyncProductsController extends ModuleAdminController
 {
     public function __construct()
     {
-        $this->bootstrap = true;
-        $this->table = 'mpstocksync_mapping';
-        $this->identifier = 'id_mapping';
-        $this->className = 'MpStockSyncMapping';
-        $this->lang = false;
-        
         parent::__construct();
         
+        $this->bootstrap = true;
+        $this->table = 'mpstocksync_mapping';  // JAVÍTVA: mpstocksync_mapping
+        $this->className = 'MpStockSyncMapping'; // Model class
+        $this->identifier = 'id_mapping';
+        $this->lang = false;
+        
+        // Lista oszlopok
         $this->fields_list = [
             'id_mapping' => [
-                'title' => 'ID',
-                'width' => 50,
+                'title' => $this->l('ID'),
+                'align' => 'center',
+                'class' => 'fixed-width-xs'
+            ],
+            'id_product' => [
+                'title' => $this->l('Product ID'),
+                'align' => 'center',
+                'class' => 'fixed-width-xs'
+            ],
+            'api_name' => [  // JAVÍTVA: marketplace_name → api_name
+                'title' => $this->l('Marketplace'),
+                'align' => 'center',
+                'type' => 'select',
+                'list' => ['emag', 'trendyol'],
+                'filter_key' => 'a!api_name'
+            ],
+            'external_id' => [  // JAVÍTVA: marketplace_product_id → external_id
+                'title' => $this->l('Marketplace Product ID'),
                 'align' => 'center'
             ],
-            'api_name' => [
-                'title' => 'Marketplace',
-                'width' => 100,
-                'callback' => 'renderMarketplace'
-            ],
-            'external_id' => [
-                'title' => 'External ID',
-                'width' => 150
-            ],
-            'product_name' => [
-                'title' => 'Product',
-                'width' => 200,
-                'callback' => 'renderProductName'
+            'sync_stock' => [
+                'title' => $this->l('Sync Stock'),
+                'align' => 'center',
+                'type' => 'bool',
+                'active' => 'sync_stock'
             ],
             'last_sync' => [
-                'title' => 'Last Sync',
-                'width' => 120,
-                'type' => 'datetime'
+                'title' => $this->l('Last Sync'),
+                'type' => 'datetime',
+                'align' => 'center'
             ],
             'active' => [
-                'title' => 'Status',
-                'width' => 80,
+                'title' => $this->l('Active'),
                 'align' => 'center',
-                'active' => 'status',
-                'type' => 'bool'
+                'type' => 'bool',
+                'active' => 'active'
             ]
         ];
         
+        $this->actions = ['edit', 'delete'];
         $this->bulk_actions = [
-            'enable' => [
-                'text' => 'Enable',
-                'icon' => 'icon-check'
-            ],
-            'disable' => [
-                'text' => 'Disable',
-                'icon' => 'icon-remove'
-            ],
             'delete' => [
-                'text' => 'Delete',
-                'icon' => 'icon-trash',
-                'confirm' => 'Delete selected mappings?'
+                'text' => $this->l('Delete selected'),
+                'confirm' => $this->l('Delete selected items?')
+            ],
+            'enableSelection' => [
+                'text' => $this->l('Enable selection'),
+                'icon' => 'icon-power-off text-success'
+            ],
+            'disableSelection' => [
+                'text' => $this->l('Disable selection'),
+                'icon' => 'icon-power-off text-danger'
             ]
         ];
+        
+        // Default sort order
+        $this->_defaultOrderBy = 'id_mapping';
+        $this->_defaultOrderWay = 'DESC';
     }
     
     public function initContent()
     {
         parent::initContent();
         
-        // Handle AJAX requests
-        if (Tools::isSubmit('ajax') && Tools::getValue('action') == 'search_products') {
-            $this->ajaxProcessSearchProducts();
+        // API beállítások ellenőrzése
+        $emag_configured = Configuration::get('MP_EMAG_CLIENT_ID') && Configuration::get('MP_EMAG_CLIENT_SECRET');
+        $trendyol_configured = Configuration::get('MP_TRENDYOL_API_KEY') && Configuration::get('MP_TRENDYOL_API_SECRET');
+        
+        if (!$emag_configured && !$trendyol_configured) {
+            $this->warnings[] = $this->l('Please configure API settings first to use product mapping.');
         }
         
-        if (Tools::isSubmit('save_mapping')) {
-            $this->ajaxProcessSaveMapping();
-        }
-        
-        // Get existing mappings for template
-        $mappings = $this->getMappings();
-        
-        $this->context->smarty->assign([
-            'mappings' => $mappings,
-            'token' => $this->token
-        ]);
-        
-        $this->setTemplate('products.tpl');
+        $this->content = $this->renderList();
+        $this->context->smarty->assign('content', $this->content);
     }
     
-    public function renderMarketplace($value, $row)
+    public function renderForm()
     {
-        if ($value == 'emag') {
-            return '<span class="label label-primary">eMAG</span>';
-        } elseif ($value == 'trendyol') {
-            return '<span class="label" style="background:#ff6b00">Trendyol</span>';
-        }
-        return $value;
-    }
-    
-    public function renderProductName($value, $row)
-    {
-        // Try to get product name
-        $product = new Product($row['id_product'], false, $this->context->language->id);
-        if (Validate::isLoadedObject($product)) {
-            return $product->name;
-        }
-        return 'Product ID: ' . $row['id_product'];
-    }
-    
-    private function getMappings()
-    {
-        $sql = 'SELECT m.*, p.reference, pl.name as product_name
-                FROM `'._DB_PREFIX_.'mpstocksync_mapping` m
-                LEFT JOIN `'._DB_PREFIX_.'product` p ON p.id_product = m.id_product
-                LEFT JOIN `'._DB_PREFIX_.'product_lang` pl ON pl.id_product = p.id_product
-                    AND pl.id_lang = '.(int)$this->context->language->id.'
-                ORDER BY m.date_upd DESC
-                LIMIT 50';
-        
-        return Db::getInstance()->executeS($sql);
-    }
-    
-    private function ajaxProcessSearchProducts()
-    {
-        $query = Tools::getValue('query');
-        
-        $sql = 'SELECT p.id_product, pl.name, p.reference, p.ean13
-                FROM `'._DB_PREFIX_.'product` p
-                INNER JOIN `'._DB_PREFIX_.'product_lang` pl ON pl.id_product = p.id_product
-                    AND pl.id_lang = '.(int)$this->context->language->id.'
-                WHERE p.active = 1
-                AND (pl.name LIKE "%'.pSQL($query).'%" 
-                     OR p.reference LIKE "%'.pSQL($query).'%"
-                     OR p.ean13 LIKE "%'.pSQL($query).'%")
-                ORDER BY pl.name ASC
-                LIMIT 20';
-        
-        $products = Db::getInstance()->executeS($sql);
-        
-        die(json_encode($products));
-    }
-    
-    private function ajaxProcessSaveMapping()
-    {
-        $id_mapping = (int)Tools::getValue('id_mapping');
-        $id_product = (int)Tools::getValue('id_product');
-        $api_name = Tools::getValue('api_name');
-        $external_id = Tools::getValue('external_id');
-        $active = (int)Tools::getValue('active');
-        
-        $data = [
-            'id_product' => $id_product,
-            'id_product_attribute' => 0,
-            'api_name' => pSQL($api_name),
-            'external_id' => pSQL($external_id),
-            'active' => $active,
-            'date_upd' => date('Y-m-d H:i:s')
+        // Form mezők
+        $this->fields_form = [
+            'legend' => [
+                'title' => $this->l('Product Mapping'),
+                'icon' => 'icon-link'
+            ],
+            'input' => [
+                [
+                    'type' => 'text',
+                    'label' => $this->l('Product ID'),
+                    'name' => 'id_product',
+                    'required' => true,
+                    'col' => 4
+                ],
+                [
+                    'type' => 'text',
+                    'label' => $this->l('Product Attribute ID'),
+                    'name' => 'id_product_attribute',
+                    'col' => 4,
+                    'hint' => $this->l('0 for product without attributes')
+                ],
+                [
+                    'type' => 'select',
+                    'label' => $this->l('Marketplace'),
+                    'name' => 'api_name',
+                    'required' => true,
+                    'options' => [
+                        'query' => [
+                            ['id' => 'emag', 'name' => 'eMAG'],
+                            ['id' => 'trendyol', 'name' => 'Trendyol']
+                        ],
+                        'id' => 'id',
+                        'name' => 'name'
+                    ],
+                    'col' => 4
+                ],
+                [
+                    'type' => 'text',
+                    'label' => $this->l('Marketplace Product ID'),
+                    'name' => 'external_id',
+                    'required' => true,
+                    'col' => 4
+                ],
+                [
+                    'type' => 'switch',
+                    'label' => $this->l('Sync Stock'),
+                    'name' => 'sync_stock',
+                    'required' => false,
+                    'is_bool' => true,
+                    'values' => [
+                        [
+                            'id' => 'sync_stock_on',
+                            'value' => 1,
+                            'label' => $this->l('Yes')
+                        ],
+                        [
+                            'id' => 'sync_stock_off',
+                            'value' => 0,
+                            'label' => $this->l('No')
+                        ]
+                    ],
+                    'col' => 4
+                ],
+                [
+                    'type' => 'switch',
+                    'label' => $this->l('Active'),
+                    'name' => 'active',
+                    'required' => false,
+                    'is_bool' => true,
+                    'values' => [
+                        [
+                            'id' => 'active_on',
+                            'value' => 1,
+                            'label' => $this->l('Yes')
+                        ],
+                        [
+                            'id' => 'active_off',
+                            'value' => 0,
+                            'label' => $this->l('No')
+                        ]
+                    ],
+                    'col' => 4
+                ]
+            ],
+            'submit' => [
+                'title' => $this->l('Save'),
+                'class' => 'btn btn-default pull-right'
+            ]
         ];
         
-        if ($id_mapping > 0) {
-            // Update existing
-            $result = Db::getInstance()->update('mpstocksync_mapping', $data, 'id_mapping = ' . $id_mapping);
-        } else {
-            // Insert new
-            $data['date_add'] = date('Y-m-d H:i:s');
-            $result = Db::getInstance()->insert('mpstocksync_mapping', $data);
-        }
-        
-        die(json_encode([
-            'success' => $result,
-            'message' => $result ? 'Mapping saved successfully' : 'Error saving mapping'
-        ]));
+        return parent::renderForm();
     }
     
-    public function initToolbar()
+    public function postProcess()
     {
-        parent::initToolbar();
+        if (Tools::isSubmit('submitAdd' . $this->table)) {
+            $id_product = (int)Tools::getValue('id_product');
+            $id_product_attribute = (int)Tools::getValue('id_product_attribute');
+            $api_name = Tools::getValue('api_name');
+            $external_id = Tools::getValue('external_id');
+            
+            // Ellenőrzés, hogy létezik-e a termék
+            if (!Product::existsInDatabase($id_product, 'product')) {
+                $this->errors[] = $this->l('Product does not exist');
+            }
+            
+            // Ellenőrzés, hogy létezik-e már a leképezés
+            $exists = Db::getInstance()->getValue('
+                SELECT COUNT(*) FROM `'._DB_PREFIX_.'mpstocksync_mapping`
+                WHERE id_product = '.(int)$id_product.'
+                AND id_product_attribute = '.(int)$id_product_attribute.'
+                AND api_name = "'.pSQL($api_name).'"
+            ');
+            
+            if ($exists) {
+                $this->errors[] = $this->l('Mapping already exists for this product and marketplace');
+            }
+        }
         
-        // Remove default new button
-        unset($this->toolbar_btn['new']);
+        parent::postProcess();
+    }
+    
+    public function renderList()
+    {
+        // Ha nincs adat, mutassunk üzenetet
+        $total = Db::getInstance()->getValue('SELECT COUNT(*) FROM `'._DB_PREFIX_.'mpstocksync_mapping`');
         
-        // Add custom buttons
-        $this->page_header_toolbar_btn['add_mapping'] = [
-            'href' => '#',
-            'desc' => 'Add Mapping',
-            'icon' => 'process-icon-new',
-            'class' => 'btn-primary'
-        ];
+        if ($total == 0) {
+            $this->informations[] = $this->l('No product mappings found. Click "Add new" to create your first mapping.');
+        }
         
-        $this->page_header_toolbar_btn['import_csv'] = [
-            'href' => self::$currentIndex . '&importcsv&token=' . $this->token,
-            'desc' => 'Import CSV',
-            'icon' => 'process-icon-upload'
-        ];
-        
-        $this->page_header_toolbar_btn['export_csv'] = [
-            'href' => self::$currentIndex . '&exportcsv&token=' . $this->token,
-            'desc' => 'Export CSV',
-            'icon' => 'process-icon-download'
-        ];
+        return parent::renderList();
+    }
+    
+    /**
+     * Bulk action: Enable selected mappings
+     */
+    public function processBulkEnableSelection()
+    {
+        if ($this->access('edit')) {
+            if (is_array($this->boxes) && !empty($this->boxes)) {
+                $ids = array_map('intval', $this->boxes);
+                Db::getInstance()->execute('
+                    UPDATE `'._DB_PREFIX_.'mpstocksync_mapping`
+                    SET active = 1
+                    WHERE id_mapping IN ('.implode(',', $ids).')
+                ');
+                $this->confirmations[] = sprintf($this->l('%d mapping(s) enabled successfully'), count($ids));
+            }
+        }
+    }
+    
+    /**
+     * Bulk action: Disable selected mappings
+     */
+    public function processBulkDisableSelection()
+    {
+        if ($this->access('edit')) {
+            if (is_array($this->boxes) && !empty($this->boxes)) {
+                $ids = array_map('intval', $this->boxes);
+                Db::getInstance()->execute('
+                    UPDATE `'._DB_PREFIX_.'mpstocksync_mapping`
+                    SET active = 0
+                    WHERE id_mapping IN ('.implode(',', $ids).')
+                ');
+                $this->confirmations[] = sprintf($this->l('%d mapping(s) disabled successfully'), count($ids));
+            }
+        }
     }
 }

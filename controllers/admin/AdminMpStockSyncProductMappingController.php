@@ -1,153 +1,109 @@
 <?php
 
-// Fontos: Ellenőrizd, hogy ez a fájl a megfelelő helyen van!
-// Elérési út: /modules/mpstocksync_v2/controllers/admin/AdminMpStockSyncProductMappingController.php
-
 if (!defined('_PS_VERSION_')) {
     exit;
 }
 
 class AdminMpStockSyncProductMappingController extends ModuleAdminController
 {
-    public $module;
-    
     public function __construct()
     {
         parent::__construct();
         
         $this->bootstrap = true;
-        $this->table = 'mp_stock_product_mapping';
-        $this->className = 'MpStockProductMapping';
+        $this->table = 'mp_stock_product_mapping'; // Ez a tábla neve
+        $this->className = 'MpStockProductMapping'; // Model osztály neve
         $this->identifier = 'id_mapping';
         $this->lang = false;
         
-        // Modul példány beállítása
-        $this->module = Module::getInstanceByName('mpstocksync_v2');
+        // Ellenőrizzük, hogy létezik-e a tábla
+        if (!$this->tableExists()) {
+            $this->warnings[] = $this->l('Database table does not exist. Please install the module properly.');
+        }
         
-        // Alap lista beállítások
+        // Lista oszlopok
         $this->fields_list = array(
             'id_mapping' => array(
                 'title' => $this->l('ID'),
                 'align' => 'center',
-                'class' => 'fixed-width-xs',
-                'search' => false
+                'class' => 'fixed-width-xs'
             ),
             'id_product' => array(
                 'title' => $this->l('Product ID'),
                 'align' => 'center',
-                'search' => false
-            ),
-            'product_name' => array(
-                'title' => $this->l('Product Name'),
-                'search' => false
+                'class' => 'fixed-width-xs'
             ),
             'marketplace_product_id' => array(
-                'title' => $this->l('Marketplace ID'),
-                'align' => 'center',
-                'search' => false
+                'title' => $this->l('Marketplace Product ID'),
+                'align' => 'center'
             ),
             'marketplace_name' => array(
                 'title' => $this->l('Marketplace'),
-                'align' => 'center',
-                'search' => false
+                'align' => 'center'
             ),
             'last_sync' => array(
                 'title' => $this->l('Last Sync'),
                 'type' => 'datetime',
-                'align' => 'center',
-                'search' => false
+                'align' => 'center'
             )
         );
         
         $this->actions = array('edit', 'delete');
-        $this->bulk_actions = array(
-            'delete' => array(
-                'text' => $this->l('Delete selected'),
-                'confirm' => $this->l('Delete selected items?')
-            )
-        );
     }
     
-    public function init()
+    /**
+     * Ellenőrzi, hogy létezik-e a tábla
+     */
+    private function tableExists()
     {
-        parent::init();
+        $sql = 'SHOW TABLES LIKE "' . _DB_PREFIX_ . 'mp_stock_product_mapping"';
+        return (bool) Db::getInstance()->executeS($sql);
     }
     
     public function initContent()
     {
         parent::initContent();
         
-        // API beállítások ellenőrzése
+        // Ellenőrizzük a tábla létezését
+        if (!$this->tableExists()) {
+            $this->content = $this->displayTableError();
+            $this->context->smarty->assign('content', $this->content);
+            return;
+        }
+        
+        // Ellenőrizzük az API beállításokat
         $api_key = Configuration::get('MP_STOCK_API_KEY');
         $api_secret = Configuration::get('MP_STOCK_API_SECRET');
         
         if (empty($api_key) || empty($api_secret)) {
-            // Információs üzenet ha nincs API beállítva
-            $warning_message = $this->l('API settings are not configured. Please configure your API credentials in the "API Settings" tab first.');
-            $this->context->smarty->assign(array(
-                'warning_message' => $warning_message,
-                'has_api_config' => false
-            ));
-        } else {
-            $this->context->smarty->assign(array(
-                'has_api_config' => true
-            ));
+            $this->warnings[] = $this->l('Please configure API settings first.');
         }
         
-        // Rendereljük a tartalmat
-        $this->setTemplate('product_mapping.tpl');
+        // Betöltjük a listát
+        $this->content = $this->renderList();
+        $this->context->smarty->assign('content', $this->content);
     }
     
     public function renderList()
     {
-        // Először ellenőrizzük az API beállításokat
-        $api_key = Configuration::get('MP_STOCK_API_KEY');
-        $api_secret = Configuration::get('MP_STOCK_API_SECRET');
-        
-        if (empty($api_key) || empty($api_secret)) {
-            return $this->displayApiWarning();
+        // Ha nincs tábla, mutatunk hibát
+        if (!$this->tableExists()) {
+            return $this->displayTableError();
         }
         
-        // Próbáljuk meg lekérni az adatokat
-        try {
-            // Itt kellene a tényleges adatlekérdezés
-            // Egyelőre üres listát adunk vissza
-            
-            $this->_select = 'a.*, pl.name as product_name';
-            $this->_join = 'LEFT JOIN '._DB_PREFIX_.'product_lang pl ON (a.id_product = pl.id_product AND pl.id_lang = '.(int)$this->context->language->id.')';
-            $this->_where = 'AND 1';
-            $this->_orderBy = 'a.id_mapping';
-            $this->_orderWay = 'DESC';
-            
-            $content = parent::renderList();
-            
-            // Ha nincs adat
-            if (empty($this->_list)) {
-                $no_data_message = $this->l('No product mappings found. Click "Add new" to create your first mapping.');
-                $this->context->smarty->assign('no_data_message', $no_data_message);
-            }
-            
-            return $content;
-            
-        } catch (Exception $e) {
-            PrestaShopLogger::addLog('Product Mapping Error: ' . $e->getMessage(), 3);
-            
-            $error_message = $this->l('Error loading product mappings. Please check your API configuration.');
-            $this->context->smarty->assign('error_message', $error_message);
-            
-            return $this->displayErrorMessage();
-        }
+        // Egyszerű lista betöltés
+        $this->_select = '*';
+        $this->_orderBy = 'id_mapping';
+        $this->_orderWay = 'DESC';
+        
+        return parent::renderList();
     }
     
     public function renderForm()
     {
-        // API ellenőrzés
-        $api_key = Configuration::get('MP_STOCK_API_KEY');
-        $api_secret = Configuration::get('MP_STOCK_API_SECRET');
-        
-        if (empty($api_key) || empty($api_secret)) {
-            $this->errors[] = $this->l('Please configure API settings first.');
-            return;
+        if (!$this->tableExists()) {
+            $this->errors[] = $this->l('Database table is missing.');
+            return '';
         }
         
         $this->fields_form = array(
@@ -161,16 +117,14 @@ class AdminMpStockSyncProductMappingController extends ModuleAdminController
                     'label' => $this->l('Product ID'),
                     'name' => 'id_product',
                     'required' => true,
-                    'col' => 4,
-                    'hint' => $this->l('Enter your PrestaShop product ID')
+                    'col' => 4
                 ),
                 array(
                     'type' => 'text',
                     'label' => $this->l('Marketplace Product ID'),
                     'name' => 'marketplace_product_id',
                     'required' => true,
-                    'col' => 4,
-                    'hint' => $this->l('Enter the marketplace product ID/SKU')
+                    'col' => 4
                 ),
                 array(
                     'type' => 'select',
@@ -182,8 +136,7 @@ class AdminMpStockSyncProductMappingController extends ModuleAdminController
                             array('id' => 'shopify', 'name' => 'Shopify'),
                             array('id' => 'amazon', 'name' => 'Amazon'),
                             array('id' => 'ebay', 'name' => 'Ebay'),
-                            array('id' => 'woocommerce', 'name' => 'WooCommerce'),
-                            array('id' => 'other', 'name' => 'Other')
+                            array('id' => 'woocommerce', 'name' => 'WooCommerce')
                         ),
                         'id' => 'id',
                         'name' => 'name'
@@ -193,58 +146,57 @@ class AdminMpStockSyncProductMappingController extends ModuleAdminController
             ),
             'submit' => array(
                 'title' => $this->l('Save'),
-                'class' => 'btn btn-default pull-right'
-            ),
-            'buttons' => array(
-                'cancel' => array(
-                    'title' => $this->l('Cancel'),
-                    'href' => $this->context->link->getAdminLink('AdminMpStockSyncProductMapping'),
-                    'icon' => 'process-icon-cancel',
-                    'class' => 'btn btn-default'
-                )
+                'class' => 'btn btn-default'
             )
         );
         
         return parent::renderForm();
     }
     
-    protected function displayApiWarning()
-    {
-        $this->context->smarty->assign(array(
-            'api_warning' => true,
-            'warning_message' => $this->l('Please configure API settings first to use product mapping.')
-        ));
-        
-        return $this->context->smarty->fetch(_PS_MODULE_DIR_.'mpstocksync_v2/views/templates/admin/api_warning.tpl');
-    }
-    
-    protected function displayErrorMessage()
-    {
-        return $this->context->smarty->fetch(_PS_MODULE_DIR_.'mpstocksync_v2/views/templates/admin/error_message.tpl');
-    }
-    
-    public function setMedia()
-    {
-        parent::setMedia();
-        
-        // CSS és JS fájlok hozzáadása
-        $this->addCSS(_PS_MODULE_DIR_.'mpstocksync_v2/views/css/product_mapping.css');
-        $this->addJS(_PS_MODULE_DIR_.'mpstocksync_v2/views/js/product_mapping.js');
-    }
-    
     /**
-     * Hozzáférési jogok ellenőrzése
+     * Hibaüzenet, ha nincs tábla
      */
-    public function checkAccess()
+    private function displayTableError()
     {
-        return true; // Vagy egyedi jogosultság ellenőrzés
+        return '
+        <div class="alert alert-danger">
+            <h4><i class="icon-warning"></i> ' . $this->l('Database Error') . '</h4>
+            <p>' . $this->l('The required database table does not exist.') . '</p>
+            <p>' . $this->l('Please run this SQL query in your database:') . '</p>
+            <pre style="background:#f1f1f1;padding:10px;border-radius:3px;">
+CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'mp_stock_product_mapping` (
+  `id_mapping` INT(11) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `id_product` INT(11) UNSIGNED NOT NULL,
+  `marketplace_product_id` VARCHAR(255) NOT NULL,
+  `marketplace_name` VARCHAR(50) NOT NULL,
+  `last_sync` DATETIME NULL,
+  `date_add` DATETIME NOT NULL,
+  `date_upd` DATETIME NOT NULL,
+  PRIMARY KEY (`id_mapping`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+            </pre>
+            <p>
+                <a href="' . $this->context->link->getAdminLink('AdminModules') . '" class="btn btn-default">
+                    <i class="icon-arrow-left"></i> ' . $this->l('Back to Modules') . '
+                </a>
+            </p>
+        </div>';
     }
     
-    /**
-     * View hozzáférés ellenőrzése
-     */
-    public function viewAccess($disable = false)
+    public function postProcess()
     {
-        return true;
+        if (Tools::isSubmit('submitAdd' . $this->table)) {
+            $id_product = (int)Tools::getValue('id_product');
+            $marketplace_product_id = Tools::getValue('marketplace_product_id');
+            $marketplace_name = Tools::getValue('marketplace_name');
+            
+            if ($id_product > 0 && !empty($marketplace_product_id) && !empty($marketplace_name)) {
+                $this->confirmations[] = $this->l('Mapping saved successfully');
+            } else {
+                $this->errors[] = $this->l('Please fill all fields correctly');
+            }
+        }
+        
+        parent::postProcess();
     }
 }

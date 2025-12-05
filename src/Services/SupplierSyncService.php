@@ -9,16 +9,16 @@ class SupplierSyncService
     }
     
     private function loadSupplierConfig($supplierId)
-    {
-        $sql = 'SELECT * FROM `'._DB_PREFIX_.'mpstocksync_suppliers`
-                WHERE id_supplier = '.(int)$supplierId;
-        
-        $this->supplierConfig = Db::getInstance()->getRow($sql);
-        
-        if (!$this->supplierConfig) {
-            throw new Exception('Supplier configuration not found');
-        }
+{
+    $sql = 'SELECT * FROM `'._DB_PREFIX_.'mpstocksync_suppliers`
+            WHERE id_supplier = '.(int)$supplierId;
+    
+    $this->supplierConfig = Db::getInstance()->getRow($sql);
+    
+    if (!$this->supplierConfig) {
+        throw new Exception('Supplier configuration not found for ID: ' . $supplierId);
     }
+}
     
     public function syncSupplierToShops($supplierId)
     {

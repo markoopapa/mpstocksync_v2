@@ -1,0 +1,25 @@
+{
+    "name": "prestashop/mpstocksync",
+    "description": "eMAG and Trendyol Stock Synchronization Module",
+    "type": "prestashop-module",
+    "license": "MIT",
+    "require": {
+        "php": ">=7.2.0",
+        "ext-curl": "*",
+        "ext-json": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "MpStockSync\\": "src/"
+        }
+    },
+    "config": {
+        "prepend-autoloader": false
+    },
+    "authors": [
+        {
+            "name": "MP Team",
+            "email": "info@example.com"
+        }
+    ]
+}

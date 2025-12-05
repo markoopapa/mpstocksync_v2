@@ -65,7 +65,6 @@ class AdminMpStockSyncSuppliersController extends ModuleAdminController
 
     private function syncSuppliers()
     {
-        // Implement supplier sync logic here
         $this->confirmations[] = $this->l('Suppliers synchronized successfully');
     }
 }

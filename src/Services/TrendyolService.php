@@ -1,4 +1,6 @@
 <?php
+namespace MpStockSync\Services;  // ← UGYANAZ A NAMESPACE!
+
 class TrendyolService
 {
     private $apiUrl;
@@ -32,7 +34,7 @@ class TrendyolService
     {
         return [
             'success' => true,
-            'message' => 'Connection test successful (MOCK)'
+            'message' => 'Trendyol connection test successful (MOCK)'
         ];
     }
 }

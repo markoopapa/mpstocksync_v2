@@ -6,8 +6,8 @@ class AdminMpStockSyncProductsController extends ModuleAdminController
         parent::__construct();
         
         $this->bootstrap = true;
-        $this->table = 'mpstocksync_mapping';  // JAVÍTVA: mpstocksync_mapping
-        $this->className = 'MpStockSyncMapping'; // Model class
+        $this->table = 'mpstocksync_mapping';
+        $this->className = 'MpStockSyncMapping';
         $this->identifier = 'id_mapping';
         $this->lang = false;
         
@@ -16,62 +16,64 @@ class AdminMpStockSyncProductsController extends ModuleAdminController
             'id_mapping' => [
                 'title' => $this->l('ID'),
                 'align' => 'center',
-                'class' => 'fixed-width-xs'
+                'class' => 'fixed-width-xs',
+                'orderby' => true,
+                'search' => false
             ],
             'id_product' => [
                 'title' => $this->l('Product ID'),
                 'align' => 'center',
-                'class' => 'fixed-width-xs'
+                'class' => 'fixed-width-xs',
+                'orderby' => true,
+                'search' => false
             ],
-            'api_name' => [  // JAVÍTVA: marketplace_name → api_name
+            'api_name' => [
                 'title' => $this->l('Marketplace'),
                 'align' => 'center',
                 'type' => 'select',
-                'list' => ['emag', 'trendyol'],
-                'filter_key' => 'a!api_name'
+                'list' => [
+                    'emag' => 'eMAG',
+                    'trendyol' => 'Trendyol'
+                ],
+                'filter_key' => 'api_name',
+                'orderby' => true
             ],
-            'external_id' => [  // JAVÍTVA: marketplace_product_id → external_id
+            'external_id' => [
                 'title' => $this->l('Marketplace Product ID'),
-                'align' => 'center'
+                'align' => 'center',
+                'orderby' => true,
+                'search' => true
             ],
             'sync_stock' => [
                 'title' => $this->l('Sync Stock'),
                 'align' => 'center',
                 'type' => 'bool',
-                'active' => 'sync_stock'
+                'active' => 'sync_stock',
+                'orderby' => true
             ],
             'last_sync' => [
                 'title' => $this->l('Last Sync'),
                 'type' => 'datetime',
-                'align' => 'center'
+                'align' => 'center',
+                'orderby' => true
             ],
             'active' => [
                 'title' => $this->l('Active'),
                 'align' => 'center',
                 'type' => 'bool',
-                'active' => 'active'
+                'active' => 'active',
+                'orderby' => true
             ]
         ];
         
         $this->actions = ['edit', 'delete'];
-        $this->bulk_actions = [
-            'delete' => [
-                'text' => $this->l('Delete selected'),
-                'confirm' => $this->l('Delete selected items?')
-            ],
-            'enableSelection' => [
-                'text' => $this->l('Enable selection'),
-                'icon' => 'icon-power-off text-success'
-            ],
-            'disableSelection' => [
-                'text' => $this->l('Disable selection'),
-                'icon' => 'icon-power-off text-danger'
-            ]
-        ];
         
-        // Default sort order
+        // Default sort order - JAVÍTVA: 'a.' prefix nélkül
         $this->_defaultOrderBy = 'id_mapping';
         $this->_defaultOrderWay = 'DESC';
+        
+        // Alias beállítása
+        $this->_select = 'a.*';
     }
     
     public function initContent()
@@ -88,6 +90,48 @@ class AdminMpStockSyncProductsController extends ModuleAdminController
         
         $this->content = $this->renderList();
         $this->context->smarty->assign('content', $this->content);
+    }
+    
+    /**
+     * JAVÍTOTT: RenderList metódus - megakadályozzuk az automatikus alias-t
+     */
+    public function renderList()
+    {
+        // Ha nincs adat, mutassunk üzenetet
+        $total = Db::getInstance()->getValue('SELECT COUNT(*) FROM `'._DB_PREFIX_.'mpstocksync_mapping`');
+        
+        if ($total == 0) {
+            $this->informations[] = $this->l('No product mappings found. Click "Add new" to create your first mapping.');
+        }
+        
+        // Manuálisan beállítjuk a WHERE feltételt, hogy ne használjon alias-t
+        $this->_where = '1';
+        
+        // Lekérdezés előkészítése - JAVÍTVA
+        $this->prepareTable();
+        
+        return parent::renderList();
+    }
+    
+    /**
+     * Tábla előkészítése
+     */
+    private function prepareTable()
+    {
+        // Biztosítjuk, hogy a tábla neve helyesen legyen megadva
+        $this->table = 'mpstocksync_mapping';
+        
+        // SQL alias beállítása
+        $this->_select = '*';
+        
+        // WHERE feltétel
+        $this->_where = '1';
+        
+        // GROUP BY törlése
+        $this->_group = '';
+        
+        // JOIN-ok törlése
+        $this->_join = '';
     }
     
     public function renderForm()
@@ -212,53 +256,5 @@ class AdminMpStockSyncProductsController extends ModuleAdminController
         }
         
         parent::postProcess();
-    }
-    
-    public function renderList()
-    {
-        // Ha nincs adat, mutassunk üzenetet
-        $total = Db::getInstance()->getValue('SELECT COUNT(*) FROM `'._DB_PREFIX_.'mpstocksync_mapping`');
-        
-        if ($total == 0) {
-            $this->informations[] = $this->l('No product mappings found. Click "Add new" to create your first mapping.');
-        }
-        
-        return parent::renderList();
-    }
-    
-    /**
-     * Bulk action: Enable selected mappings
-     */
-    public function processBulkEnableSelection()
-    {
-        if ($this->access('edit')) {
-            if (is_array($this->boxes) && !empty($this->boxes)) {
-                $ids = array_map('intval', $this->boxes);
-                Db::getInstance()->execute('
-                    UPDATE `'._DB_PREFIX_.'mpstocksync_mapping`
-                    SET active = 1
-                    WHERE id_mapping IN ('.implode(',', $ids).')
-                ');
-                $this->confirmations[] = sprintf($this->l('%d mapping(s) enabled successfully'), count($ids));
-            }
-        }
-    }
-    
-    /**
-     * Bulk action: Disable selected mappings
-     */
-    public function processBulkDisableSelection()
-    {
-        if ($this->access('edit')) {
-            if (is_array($this->boxes) && !empty($this->boxes)) {
-                $ids = array_map('intval', $this->boxes);
-                Db::getInstance()->execute('
-                    UPDATE `'._DB_PREFIX_.'mpstocksync_mapping`
-                    SET active = 0
-                    WHERE id_mapping IN ('.implode(',', $ids).')
-                ');
-                $this->confirmations[] = sprintf($this->l('%d mapping(s) disabled successfully'), count($ids));
-            }
-        }
     }
 }

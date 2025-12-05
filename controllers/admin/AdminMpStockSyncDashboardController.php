@@ -14,15 +14,23 @@ class AdminMpStockSyncDashboardController extends ModuleAdminController
         // Betöltjük a modult
         $module = Module::getInstanceByName('mpstocksync');
         
-        // Statisztikák lekérése - biztosan tömb legyen
+        if (!$module) {
+            $this->errors[] = $this->l('Module not found');
+            $this->content = '<div class="alert alert-danger">Module not found</div>';
+            $this->context->smarty->assign('content', $this->content);
+            return;
+        }
+        
+        // Statisztikák lekérése
         $stats = $module->getSyncStatistics();
         
         // Biztosítjuk, hogy minden kulcs létezik
         $stats = $this->ensureStatsStructure($stats);
         
+        // JAVÍTVA: getLocalPath() használata _path helyett
         $this->context->smarty->assign([
             'stats' => $stats,
-            'module_dir' => $module->_path
+            'module_dir' => $module->getLocalPath()  // ← JAVÍTVA!
         ]);
         
         $this->setTemplate('dashboard/dashboard.tpl');

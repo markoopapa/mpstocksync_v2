@@ -747,10 +747,25 @@ class MpStockSync extends Module
     }
     
     public function getSyncStatistics()
-    {
-        $stats = [];
-        
-        // Marketplace stats
+{
+    $stats = [
+        'emag' => [
+            'total' => 0,
+            'success' => 0,
+            'failed' => 0
+        ],
+        'trendyol' => [
+            'total' => 0,
+            'success' => 0,
+            'failed' => 0
+        ],
+        'suppliers' => [],
+        'recent_syncs' => [],
+        'last_sync_log' => $this->getLastSyncLog()
+    ];
+    
+    // Marketplace stats
+    try {
         $sql = 'SELECT api_name, COUNT(*) as total, 
                 SUM(IF(status=1,1,0)) as success,
                 SUM(IF(status=0,1,0)) as failed
@@ -760,15 +775,29 @@ class MpStockSync extends Module
         
         $result = Db::getInstance()->executeS($sql);
         
-        foreach ($result as $row) {
-            $stats[$row['api_name']] = [
-                'total' => (int)$row['total'],
-                'success' => (int)$row['success'],
-                'failed' => (int)$row['failed']
-            ];
+        if ($result) {
+            foreach ($result as $row) {
+                if ($row['api_name'] == 'emag') {
+                    $stats['emag'] = [
+                        'total' => (int)$row['total'],
+                        'success' => (int)$row['success'],
+                        'failed' => (int)$row['failed']
+                    ];
+                } elseif ($row['api_name'] == 'trendyol') {
+                    $stats['trendyol'] = [
+                        'total' => (int)$row['total'],
+                        'success' => (int)$row['success'],
+                        'failed' => (int)$row['failed']
+                    ];
+                }
+            }
         }
-        
-        // Supplier stats
+    } catch (Exception $e) {
+        PrestaShopLogger::addLog('MpStockSync stats error: ' . $e->getMessage(), 3);
+    }
+    
+    // Supplier stats
+    try {
         $sql = 'SELECT s.name, COUNT(l.id_log) as sync_count,
                 SUM(IF(l.status=1,1,0)) as success_count
                 FROM `'._DB_PREFIX_.'mpstocksync_suppliers` s
@@ -779,12 +808,19 @@ class MpStockSync extends Module
         
         $supplierStats = Db::getInstance()->executeS($sql);
         
-        $stats['suppliers'] = $supplierStats;
-        
-        // Recent syncs
-        $stats['recent_syncs'] = $this->getRecentSyncs(5);
-        $stats['last_sync_log'] = $this->getLastSyncLog();
-        
-        return $stats;
+        if ($supplierStats) {
+            $stats['suppliers'] = $supplierStats;
+        }
+    } catch (Exception $e) {
+        PrestaShopLogger::addLog('MpStockSync supplier stats error: ' . $e->getMessage(), 3);
     }
+    
+    // Recent syncs
+    try {
+        $stats['recent_syncs'] = $this->getRecentSyncs(5);
+    } catch (Exception $e) {
+        PrestaShopLogger::addLog('MpStockSync recent syncs error: ' . $e->getMessage(), 3);
+    }
+    
+    return $stats;
 }

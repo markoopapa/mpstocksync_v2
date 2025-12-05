@@ -11,12 +11,14 @@ class AdminMpStockSyncSettingsController extends ModuleAdminController
     {
         parent::initContent();
         
-        // Beállítások form elkészítése
-        $settings_form = $this->renderSettingsForm();
-        
+        // JAVÍTVA: Hiányzó változók hozzáadása
         $this->context->smarty->assign([
-            'settings_form' => $settings_form,  // FONTOS: átadjuk a template-nek
-            'module_dir' => Module::getInstanceByName('mpstocksync')->getLocalPath()
+            'settings_form' => $this->renderSettingsForm(),
+            'module_dir' => Module::getInstanceByName('mpstocksync')->getLocalPath(),
+            'ps_version' => _PS_VERSION_,  // PrestaShop verzió
+            'php_version' => phpversion(),  // PHP verzió
+            'currentIndex' => $this->context->link->getAdminLink('AdminMpStockSyncSettings'),
+            'token' => Tools::getAdminTokenLite('AdminMpStockSyncSettings')
         ]);
         
         $this->setTemplate('settings/settings.tpl');
@@ -50,74 +52,7 @@ class AdminMpStockSyncSettingsController extends ModuleAdminController
                                 'value' => 0,
                                 'label' => $this->l('No')
                             ]
-                        ],
-                        'hint' => $this->l('Enable detailed logging for debugging')
-                    ],
-                    [
-                        'type' => 'text',
-                        'label' => $this->l('Default Stock Buffer'),
-                        'name' => 'MP_DEFAULT_STOCK_BUFFER',
-                        'col' => 3,
-                        'suffix' => $this->l('pieces'),
-                        'hint' => $this->l('Default safety stock buffer for all products')
-                    ],
-                    [
-                        'type' => 'select',
-                        'label' => $this->l('Sync Priority'),
-                        'name' => 'MP_SYNC_PRIORITY',
-                        'options' => [
-                            'query' => [
-                                ['id' => 'low', 'name' => $this->l('Low (background)')],
-                                ['id' => 'normal', 'name' => $this->l('Normal')],
-                                ['id' => 'high', 'name' => $this->l('High (immediate)')]
-                            ],
-                            'id' => 'id',
-                            'name' => 'name'
-                        ],
-                        'col' => 4
-                    ],
-                    [
-                        'type' => 'switch',
-                        'label' => $this->l('Send Email Notifications'),
-                        'name' => 'MP_EMAIL_NOTIFICATIONS',
-                        'is_bool' => true,
-                        'values' => [
-                            [
-                                'id' => 'email_on',
-                                'value' => 1,
-                                'label' => $this->l('Yes')
-                            ],
-                            [
-                                'id' => 'email_off',
-                                'value' => 0,
-                                'label' => $this->l('No')
-                            ]
                         ]
-                    ],
-                    [
-                        'type' => 'text',
-                        'label' => $this->l('Notification Email'),
-                        'name' => 'MP_NOTIFICATION_EMAIL',
-                        'col' => 4,
-                        'placeholder' => 'admin@example.com'
-                    ],
-                    [
-                        'type' => 'select',
-                        'label' => $this->l('Log Retention Period'),
-                        'name' => 'MP_LOG_RETENTION',
-                        'options' => [
-                            'query' => [
-                                ['id' => '7', 'name' => $this->l('7 days')],
-                                ['id' => '30', 'name' => $this->l('30 days')],
-                                ['id' => '90', 'name' => $this->l('90 days')],
-                                ['id' => '365', 'name' => $this->l('1 year')],
-                                ['id' => '0', 'name' => $this->l('Keep forever')]
-                            ],
-                            'id' => 'id',
-                            'name' => 'name'
-                        ],
-                        'col' => 4,
-                        'hint' => $this->l('How long to keep sync logs')
                     ]
                 ],
                 'submit' => [
@@ -139,14 +74,9 @@ class AdminMpStockSyncSettingsController extends ModuleAdminController
         $helper->currentIndex = $this->context->link->getAdminLink('AdminMpStockSyncSettings', false);
         $helper->token = Tools::getAdminTokenLite('AdminMpStockSyncSettings');
         
-        // Jelenlegi értékek betöltése
+        // Jelenlegi értékek
         $helper->fields_value = [
-            'MP_DEBUG_MODE' => Configuration::get('MP_DEBUG_MODE', 0),
-            'MP_DEFAULT_STOCK_BUFFER' => Configuration::get('MP_DEFAULT_STOCK_BUFFER', 0),
-            'MP_SYNC_PRIORITY' => Configuration::get('MP_SYNC_PRIORITY', 'normal'),
-            'MP_EMAIL_NOTIFICATIONS' => Configuration::get('MP_EMAIL_NOTIFICATIONS', 0),
-            'MP_NOTIFICATION_EMAIL' => Configuration::get('MP_NOTIFICATION_EMAIL', ''),
-            'MP_LOG_RETENTION' => Configuration::get('MP_LOG_RETENTION', '30')
+            'MP_DEBUG_MODE' => Configuration::get('MP_DEBUG_MODE', 0)
         ];
         
         return $helper->generateForm([$fields_form]);
@@ -155,42 +85,10 @@ class AdminMpStockSyncSettingsController extends ModuleAdminController
     public function postProcess()
     {
         if (Tools::isSubmit('submit_mpstocksync_settings')) {
-            // Beállítások mentése
             Configuration::updateValue('MP_DEBUG_MODE', Tools::getValue('MP_DEBUG_MODE'));
-            Configuration::updateValue('MP_DEFAULT_STOCK_BUFFER', Tools::getValue('MP_DEFAULT_STOCK_BUFFER'));
-            Configuration::updateValue('MP_SYNC_PRIORITY', Tools::getValue('MP_SYNC_PRIORITY'));
-            Configuration::updateValue('MP_EMAIL_NOTIFICATIONS', Tools::getValue('MP_EMAIL_NOTIFICATIONS'));
-            Configuration::updateValue('MP_NOTIFICATION_EMAIL', Tools::getValue('MP_NOTIFICATION_EMAIL'));
-            Configuration::updateValue('MP_LOG_RETENTION', Tools::getValue('MP_LOG_RETENTION'));
-            
             $this->confirmations[] = $this->l('Settings saved successfully');
-            
-            // Régi logok törlése, ha szükséges
-            $this->cleanupOldLogs();
         }
         
         parent::postProcess();
-    }
-    
-    /**
-     * Régi logok törlése
-     */
-    private function cleanupOldLogs()
-    {
-        $retention_days = (int)Configuration::get('MP_LOG_RETENTION', 30);
-        
-        if ($retention_days > 0) {
-            $cutoff_date = date('Y-m-d H:i:s', strtotime('-' . $retention_days . ' days'));
-            
-            Db::getInstance()->execute('
-                DELETE FROM `'._DB_PREFIX_.'mpstocksync_log`
-                WHERE date_add < "' . pSQL($cutoff_date) . '"
-            ');
-            
-            Db::getInstance()->execute('
-                DELETE FROM `'._DB_PREFIX_.'mpstocksync_recent_log`
-                WHERE date_add < "' . pSQL($cutoff_date) . '"
-            ');
-        }
     }
 }

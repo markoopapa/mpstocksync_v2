@@ -1,55 +1,83 @@
 <?php
-// NINCS namespace!
-// NINCS use statement!
-
 class AdminMpStockSyncDashboardController extends ModuleAdminController
 {
     public function __construct()
     {
-        $this->bootstrap = true;
         parent::__construct();
-        
-        $this->meta_title = 'Stock Sync Dashboard';
+        $this->bootstrap = true;
     }
     
     public function initContent()
     {
         parent::initContent();
         
-        // Get module instance
+        // Betöltjük a modult
         $module = Module::getInstanceByName('mpstocksync');
         
-        // Get sync statistics
-        $stats = [];
-        if ($module) {
-            $stats = $module->getSyncStatistics();
-        }
+        // Statisztikák lekérése - biztosan tömb legyen
+        $stats = $module->getSyncStatistics();
+        
+        // Biztosítjuk, hogy minden kulcs létezik
+        $stats = $this->ensureStatsStructure($stats);
         
         $this->context->smarty->assign([
-            'dashboard_url' => $this->context->link->getAdminLink('AdminMpStockSyncDashboard'),
             'stats' => $stats,
-            'module' => $module,
-            'emag_configured' => Configuration::get('MP_EMAG_CLIENT_ID') && Configuration::get('MP_EMAG_CLIENT_SECRET'),
-            'trendyol_configured' => Configuration::get('MP_TRENDYOL_API_KEY') && Configuration::get('MP_TRENDYOL_API_SECRET')
+            'module_dir' => $module->_path
         ]);
         
-        $this->setTemplate('dashboard.tpl');
+        $this->setTemplate('dashboard/dashboard.tpl');
     }
     
-    public function initToolbar()
+    /**
+     * Biztosítja, hogy a stats tömb megfelelő struktúrával rendelkezik
+     */
+    private function ensureStatsStructure($stats)
     {
-        parent::initToolbar();
+        if (!is_array($stats)) {
+            $stats = [];
+        }
         
-        $this->page_header_toolbar_btn['sync_emag'] = [
-            'href' => self::$currentIndex . '&sync_emag&token=' . $this->token,
-            'desc' => 'Sync eMAG',
-            'icon' => 'process-icon-refresh'
+        // Alap struktúra
+        $default_stats = [
+            'emag' => [
+                'total' => 0,
+                'success' => 0,
+                'failed' => 0
+            ],
+            'trendyol' => [
+                'total' => 0,
+                'success' => 0,
+                'failed' => 0
+            ],
+            'suppliers' => [],
+            'recent_syncs' => [],
+            'last_sync_log' => 'No sync activities yet'
         ];
         
-        $this->page_header_toolbar_btn['sync_trendyol'] = [
-            'href' => self::$currentIndex . '&sync_trendyol&token=' . $this->token,
-            'desc' => 'Sync Trendyol',
-            'icon' => 'process-icon-refresh'
-        ];
+        // Összefésüljük a default értékekkel
+        $stats = array_merge($default_stats, $stats);
+        
+        // Ellenőrizzük a mélyebb struktúrákat is
+        if (!isset($stats['emag']['total'])) $stats['emag']['total'] = 0;
+        if (!isset($stats['emag']['success'])) $stats['emag']['success'] = 0;
+        if (!isset($stats['emag']['failed'])) $stats['emag']['failed'] = 0;
+        
+        if (!isset($stats['trendyol']['total'])) $stats['trendyol']['total'] = 0;
+        if (!isset($stats['trendyol']['success'])) $stats['trendyol']['success'] = 0;
+        if (!isset($stats['trendyol']['failed'])) $stats['trendyol']['failed'] = 0;
+        
+        if (!isset($stats['suppliers']) || !is_array($stats['suppliers'])) {
+            $stats['suppliers'] = [];
+        }
+        
+        if (!isset($stats['recent_syncs']) || !is_array($stats['recent_syncs'])) {
+            $stats['recent_syncs'] = [];
+        }
+        
+        if (!isset($stats['last_sync_log'])) {
+            $stats['last_sync_log'] = 'No sync activities yet';
+        }
+        
+        return $stats;
     }
 }

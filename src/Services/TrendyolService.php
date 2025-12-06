@@ -2,34 +2,61 @@
 
 namespace MpStockSync\Services;
 
-use MpStockSync\ApiClient\TrendyolApiClient;
-
 class TrendyolService
 {
-    private $client;
+    private $apiUrl;
+    private $sellerId;
+    private $apiKey;
+    private $apiSecret;
 
-    public function __construct()
-    {
-        $this->client = new TrendyolApiClient(
-            \Configuration::get('MPSTOCKSYNC_TRENDYOL_SELLER_ID'),
-            \Configuration::get('MPSTOCKSYNC_TRENDYOL_API_KEY'),
-            \Configuration::get('MPSTOCKSYNC_TRENDYOL_API_SECRET')
-        );
+    public function __construct(
+        string $apiUrl,
+        string $sellerId,
+        string $apiKey,
+        string $apiSecret
+    ) {
+        $this->apiUrl = rtrim($apiUrl, '/');
+        $this->sellerId = $sellerId;
+        $this->apiKey = $apiKey;
+        $this->apiSecret = $apiSecret;
     }
 
     /**
-     * Send stock update for a single product
+     * Küldj stock update-et Trendyol felé
      */
-    public function updateStock($productId, $reference, $quantity)
+    public function updateStock(string $productId, int $quantity): array
     {
-        return $this->client->updateStock($reference, $quantity);
-    }
+        $url = $this->apiUrl . '/suppliers/' . $this->sellerId . '/products/stock';
 
-    /**
-     * Bulk push (used for full sync)
-     */
-    public function bulkUpdateStock(array $items)
-    {
-        return $this->client->bulkUpdateStock($items);
+        $payload = [
+            'items' => [
+                [
+                    'barcode'  => $productId,
+                    'quantity' => $quantity,
+                ]
+            ]
+        ];
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_HTTPHEADER => [
+                'Content-Type: application/json',
+                'User-Agent: Trendyol-PrestaShop',
+                'Authorization: Basic ' . base64_encode($this->apiKey . ':' . $this->apiSecret),
+            ],
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => json_encode($payload),
+        ]);
+
+        $result = curl_exec($ch);
+        $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+        curl_close($ch);
+
+        return [
+            'status' => $status,
+            'response' => $result
+        ];
     }
 }
